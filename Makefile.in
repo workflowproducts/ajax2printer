@@ -1,0 +1,104 @@
+BINARY = ajax2printer
+INSTALL_DEPS = @prefix@/sbin/ @prefix@/etc/$(BINARY)/ @prefix@/etc/ajax2printer/ajax2printer.conf @INSTALL_DEPS@
+MAKE = @make@
+CFLAGS = -Wall -Wextra -Wconversion -O3 -g -fno-strict-aliasing -DVERSION=\"@VERSION@\" -DPREFIX=\"@PREFIX@\" -Ilibressl/include
+LDFLAGS = @LDFLAGS@
+CPPFLAGS = @CPPFLAGS@
+BUILD_DEPS = @BUILD_DEPS@
+
+ajax2printer_SOURCES = $(wildcard ./src/*.c)
+ajax2printer_OBJECTS = $(ajax2printer_SOURCES:.c=.o)
+
+.PHONY: libressl libressl-install destroy
+
+#### DEPENDENCIES
+libressl: libressl/Makefile
+	$(MAKE) -C libressl/
+
+libressl-install: libressl/Makefile
+	$(MAKE) install -C libressl/
+
+libressl/Makefile: libressl/Makefile.in
+	cd libressl/; ./configure; cd ../../$(BINARY)
+
+#### BUILDING
+all: $(BINARY)
+	@echo
+	@echo "Compilation Successful"
+
+$(BINARY): $(BUILD_DEPS) $(ajax2printer_OBJECTS)
+	$(CC) $(ajax2printer_OBJECTS) $(LDFLAGS) $(CFLAGS) \
+		-o ./$(BINARY)
+
+.c.o:
+	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
+
+#### CLEAN
+clean:
+	rm -f $(ajax2printer_OBJECTS) $(BINARY)
+	@echo
+	@echo "Clean Successful"
+
+#### INSTALL
+@prefix@/sbin/:
+	mkdir -p @prefix@/sbin/
+
+@prefix@/etc/$(BINARY)/:
+	mkdir -p @prefix@/etc/$(BINARY)/
+
+@prefix@/etc/$(BINARY)/$(BINARY).conf: @prefix@/etc/$(BINARY)/ config/$(BINARY).conf
+	test -f @prefix@/etc/$(BINARY)/$(BINARY).conf || install config/$(BINARY).conf @prefix@/etc/$(BINARY)/$(BINARY).conf;
+
+install: $(INSTALL_DEPS)
+	install config/$(BINARY).conf @prefix@/etc/$(BINARY)/$(BINARY).conf.example
+	install $(BINARY) @prefix@/sbin/
+	install man/ajax2printer.1 @prefix@/@MANDIR@/man1/ajax2printer.1
+	@echo
+	@echo "Installation Successful"
+
+uninstall:
+	rm @prefix@/sbin/$(BINARY)
+	rm -rf @prefix@/etc/$(BINARY)/web_root/
+	rm -rf @prefix@/etc/$(BINARY)/*.example
+	@echo
+	@echo "Uninstall Successful"
+
+destroy:
+	rm @prefix@/sbin/$(BINARY)
+	rm -rf @prefix@/etc/$(BINARY)
+	@echo
+	@echo "Destroy Successful"
+
+#### TESTING
+CONFIGS = -c ajax2printer.conf.testing
+test:
+	./$(BINARY) $(CONFIGS) -l 9
+
+test-ssl:
+	./$(BINARY) $(CONFIGS) -j ./ssl/self.crt -k ./ssl/self.key -l 9
+
+gdb:
+	echo "run" > temp_gdb_commands
+	gdb -x temp_gdb_commands --args ./$(BINARY) $(CONFIGS) -l 9
+	rm temp_gdb_commands
+
+gdb-ssl:
+	echo "run" > temp_gdb_commands
+	gdb -x temp_gdb_commands --args ./$(BINARY) $(CONFIGS) -j ./ssl/self.crt -k ../ssl/self.key -l 9
+	rm temp_gdb_commands
+
+lldb:
+	echo "run" > temp_lldb_commands
+	lldb -s temp_lldb_commands -- ./$(BINARY) $(CONFIGS) -l 9
+	rm temp_lldb_commands
+
+lldb-ssl:
+	echo "run" > temp_lldb_commands
+	lldb -s temp_lldb_commands -- ./$(BINARY) $(CONFIGS) -j ./ssl/self.crt -k ../ssl/self.key -l 9
+	rm temp_lldb_commands
+
+valgrind:
+	valgrind --leak-check=full --track-fds=yes --track-origins=yes --show-reachable=yes --suppressions=../valgrind/mac_suppressions.txt --num-callers=100 ./$(BINARY) $(CONFIGS) -l 3
+
+valgrind-ssl:
+	valgrind --leak-check=full --track-fds=yes --track-origins=yes --show-reachable=yes --suppressions=../valgrind/mac_suppressions.txt --num-callers=100 ./$(BINARY) $(CONFIGS) -j ./ssl/self.crt -k ./ssl/self.key -l 3
