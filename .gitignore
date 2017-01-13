@@ -2,7 +2,7 @@
 
 Makefile
 
-*.1
+ajax2printer.1
 
 .dirstamp
 .libs
