@@ -22,7 +22,7 @@ MAKE="make"
 MANDIR="share\/man"
 printf "checking for platform..."
 if test $(uname -s) = "Linux"; then
-	LDFLAGS=""
+	LDFLAGS="-pthread"
 	CPPFLAGS="-D_GNU_SOURCE"
 	echo "Linux"
 
