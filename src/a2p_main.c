@@ -288,7 +288,6 @@ void *handle(void *_client) {
 	free(request);
 	free(query);
 	free(str_printer_name);
-	free(str_ip);
 	free(str_msg);
 	free(str_file_name);
 
@@ -301,7 +300,6 @@ error:
 	free(request);
 	free(query);
 	free(str_printer_name);
-	free(str_ip);
 
 	free(buf);
 
