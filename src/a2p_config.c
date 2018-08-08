@@ -2,9 +2,6 @@
 
 char PORT[256] = "5000";
 long DEBUG_LEVEL = 5;
-char *str_tls_crt = NULL;
-char *str_tls_key = NULL;
-bool bol_tls = false;
 char *str_path_lp = NULL;
 char *str_global_config_file = NULL;
 
@@ -18,16 +15,6 @@ static int handler(void *str_user, const char *str_section, const char *str_name
 
 	} else if (SMATCH("", "log_level")) {
 		DEBUG_LEVEL = strtol(str_value, NULL, 10);
-
-	} else if (SMATCH("", "tls_crt")) {
-		SFREE(str_tls_crt);
-		str_tls_crt = strdup(str_value);
-		check(1, str_tls_crt != NULL, "strdup failed");
-
-	} else if (SMATCH("", "tls_key")) {
-		SFREE(str_tls_key);
-		str_tls_key = strdup(str_value);
-		check(1, str_tls_key != NULL, "strdup failed");
 
 	} else if (SMATCH("", "lp_path")) {
 		SFREE(str_path_lp);
@@ -50,8 +37,6 @@ bool parse_options(int argc, char **argv) {
 		{	"config-file",	required_argument,	NULL, 'c'	},
 		{	"port",			required_argument,	NULL, 'p'	},
 		{	"log-level",	required_argument,	NULL, 'l'	},
-		{	"tls-crt",		required_argument,	NULL, 'j'	},
-		{	"tls-key",		required_argument,	NULL, 'k'	},
 		{	"lp-path",		required_argument,	NULL, 'a'	},
 		{	NULL,			0,					NULL,  0	}
 	};
@@ -97,16 +82,6 @@ bool parse_options(int argc, char **argv) {
 		} else if (ch == 'l') {
 			DEBUG_LEVEL = strtol(optarg, NULL, 10);
 
-		} else if (ch == 'j') {
-			SFREE(str_tls_crt);
-			str_tls_crt = strdup(optarg);
-			check(1, str_tls_crt != NULL, "strdup failed");
-
-		} else if (ch == 'k') {
-			SFREE(str_tls_key);
-			str_tls_key = strdup(optarg);
-			check(1, str_tls_key != NULL, "strdup failed");
-
 		} else if (ch == 'a') {
 			SFREE(str_path_lp);
 			str_path_lp = strdup(optarg);
@@ -121,15 +96,6 @@ bool parse_options(int argc, char **argv) {
 		}
 	}
 
-	// Check if we have the tls cert/key
-	if (str_tls_crt != NULL && str_tls_key != NULL) {
-		bol_tls = true;
-
-	// We don't, so just listen on http
-	} else {
-		bol_tls = false;
-	}
-
 	return true;
 error:
 	return false;
@@ -141,8 +107,6 @@ void usage() {
 	printf("\t[-v               | --version]\012");
 	printf("\t[-c <config-file> | --config-file=<config-file>]\012");
 	printf("\t[-p <port>        | --port=<port>]\012");
-	printf("\t[-j <tls-cert>    | --tls-cert=<tls-cert>]\012");
-	printf("\t[-k <tls-key>     | --tls-key=<tls-key>]\012");
 	printf("\t[-l <log-level>   | --log-level=<log-level>]\012");
 	printf("\012");
 	printf("For more information, run `man ajax2printer`\012");

@@ -15,8 +15,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include <tls.h>
-
 #include "a2p_config.h"
 #include "a2p_exec.h"
 #include "a2p_request.h"
@@ -27,23 +25,11 @@
 #define SERROR_NORESPONSE(...) sunlogf(3, __VA_ARGS__);
 #define SFINISH_ERROR(...) sunlogf(3, __VA_ARGS__); goto error;
 
-#define SERROR_LIBTLS_NOCONTEXT(M, ...) SERROR("LIBTLS: " M, ##__VA_ARGS__);
-#define SERROR_NORESPONSE_LIBTLS_NOCONTEXT(M, ...) SERROR_NORESPONSE("LIBTLS: " M, ##__VA_ARGS__);
-#define SERROR_LIBTLS_CONTEXT(C, M, ...) SERROR("LIBTLS: %s " M, tls_error(C), ##__VA_ARGS__);
-#define SERROR_NORESPONSE_LIBTLS_CONTEXT(C, M, ...) SERROR_NORESPONSE("LIBTLS: %s " M, tls_error(C), ##__VA_ARGS__);
-
-#define SFINISH_LIBTLS_NOCONTEXT(M, ...) SFINISH_ERROR("LIBTLS: " M "\n", ##__VA_ARGS__);
-//#define SFINISH_LIBTLS_CONTEXT are you sure?
-#define SFINISH_LIBTLS_CONTEXT(C, M, ...) SFINISH_ERROR("LIBTLS: %s " M "\n", tls_error(C), ##__VA_ARGS__);
-
 // Global declarations
 int term = 0;
 void *handle(void *csock);
 
-struct tls_config *tls_server_config;
-struct tls *tls_server_context;
 struct client_t {
-	struct tls *tls_client_context;
 	int csock;
 };
 
@@ -85,44 +71,6 @@ int main(int argc, char **argv) {
 	check(2, listen(sock, BACKLOG) != -1, "Error listening");
 	freeaddrinfo(res);
 
-	if (bol_tls) {
-		tls_init();
-
-		// Initialize a configuration context
-		tls_server_config = tls_config_new();
-		if (tls_server_config == NULL) {
-			SERROR_LIBTLS_NOCONTEXT("tls_config_new() failed");
-		}
-
-		// Set the certificate file in the configuration context
-		if (tls_config_set_cert_file(tls_server_config, str_tls_crt) != 0) {
-			SERROR_LIBTLS_NOCONTEXT("tls_config_set_cert_file() failed");
-		}
-
-		// Set the key file in the configuration context
-		if (tls_config_set_key_file(tls_server_config, str_tls_key) != 0) {
-			SERROR_LIBTLS_NOCONTEXT("tls_config_set_key_file() failed");
-		}
-
-		// Set the allowed ciphers in the configuration context
-		if (tls_config_set_ciphers(tls_server_config, "compat") != 0) {
-			SERROR_LIBTLS_NOCONTEXT("tls_config_set_ciphers() failed");
-		}
-
-		// Create a server context
-		tls_server_context = tls_server();
-		if (tls_server_context == NULL) {
-			SERROR_LIBTLS_NOCONTEXT("tls_server() failed");
-		}
-
-		// Attach the configuration context to the _server context
-		if (tls_configure(tls_server_context, tls_server_config) != 0) {
-			SWARN_NORESPONSE("str_global_tls_crt: %s", str_tls_crt);
-			SWARN_NORESPONSE("str_global_tls_key: %s", str_tls_key);
-			SERROR_LIBTLS_CONTEXT(tls_server_context, "tls_configure() failed");
-		}
-	}
-
 	// Main loop
 	while (term != 1) {
 		socklen_t size = sizeof(struct sockaddr_in);
@@ -138,14 +86,6 @@ int main(int argc, char **argv) {
 
 			struct client_t *client = salloc(sizeof(struct client_t));
 			client->csock = newsock;
-			if (bol_tls) {
-				// The tls accept function takes the socket you send and makes a tls I/O
-				// context out of it
-				int int_status = tls_accept_socket(tls_server_context, &client->tls_client_context, newsock);
-				if (int_status != 0) {
-					SERROR_LIBTLS_CONTEXT(tls_server_context, "tls_accept_fds() failed");
-				}
-			}
 
 			// Spawn new thread to handle request asynchronously
 			if (pthread_create(&thread, NULL, handle, client) != 0) {
@@ -178,11 +118,7 @@ void *handle(void *_client) {
 	while (strstr(request, "Content-Length: ") == NULL) {
 		sunlogf(9, "request: %s", request);
 		memset(buf, 0, BUF_LEN + 1);
-		if (bol_tls) {
-			request_len = tls_read(client->tls_client_context, buf, BUF_LEN);
-		} else {
-			request_len = read(client->csock, buf, BUF_LEN);
-		}
+		request_len = read(client->csock, buf, BUF_LEN);
 		request = cat_append(request, buf);
 		read_total = read_total + request_len;
 		if (request_len == 0) {
@@ -196,11 +132,7 @@ void *handle(void *_client) {
 	size_t content_length = (size_t)strtol(ptr_content_length, NULL, 10);
 	while (strstr(request, "\r\n\r\n") == NULL) {
 		memset(buf, 0, BUF_LEN + 1);
-		if (bol_tls) {
-			request_len = tls_read(client->tls_client_context, buf, BUF_LEN);
-		} else {
-			request_len = read(client->csock, buf, BUF_LEN);
-		}
+		request_len = read(client->csock, buf, BUF_LEN);
 		request = cat_append(request, buf);
 		read_total = read_total + request_len;
 	}
@@ -209,11 +141,7 @@ void *handle(void *_client) {
 	content_length = content_length - strlen(ptr_query);
 	while (content_length > 0) {
 		memset(buf, 0, BUF_LEN + 1);
-		if (bol_tls) {
-			request_len = tls_read(client->tls_client_context, buf, BUF_LEN);
-		} else {
-			request_len = read(client->csock, buf, BUF_LEN);
-		}
+		request_len = read(client->csock, buf, BUF_LEN);
 		request = cat_append(request, buf);
 		read_total = read_total + request_len;
 		content_length = content_length - (size_t)request_len;
@@ -272,15 +200,7 @@ void *handle(void *_client) {
 				   "{\"stat\":\"false\",\"dat\":\"The 'cups' parameter was empty. Please pass a named printer.\"}";
 	}
 
-	if (bol_tls) {
-		request_len = tls_write(client->tls_client_context, response, strlen(response));
-		if (tls_close(client->tls_client_context) != 0) {
-			SERROR_NORESPONSE_LIBTLS_CONTEXT(client->tls_client_context, "tls_close() failed");
-		}
-		tls_free(client->tls_client_context);
-	} else {
-		write(client->csock, response, strlen(response));
-	}
+	write(client->csock, response, strlen(response));
 
 	check(2, close(client->csock) != -1, "Fail close(csock)");
 

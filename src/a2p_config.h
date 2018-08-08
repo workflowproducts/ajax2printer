@@ -13,9 +13,6 @@
 
 extern char PORT[256];
 extern long DEBUG_LEVEL;
-extern char *str_tls_crt;
-extern char *str_tls_key;
-extern bool bol_tls;
 extern char *str_path_lp;
 
 #define BACKLOG 128

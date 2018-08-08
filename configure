@@ -17,7 +17,6 @@ rm -f test.c test.o
 
 #### OS CHECK
 ## COMPILATION IS A LITTLE DIFFERENT FOR THE OS'S
-libressl="install"
 MAKE="make"
 MANDIR="share\/man"
 printf "checking for platform..."
@@ -26,12 +25,6 @@ if test $(uname -s) = "Linux"; then
 	CPPFLAGS="-D_GNU_SOURCE"
 	echo "Linux"
 
-	# On linux it is easy to check for libressl
-	printf "checking for LibreSSL..."
-	if test $(ldconfig -p | grep "libtls.so " | wc -l) = "1"; then
-		libressl="yes"
-	fi
-	echo $libressl
 elif test $(uname -s) = "Darwin"; then
 	LDFLAGS=""
 	CPPFLAGS=""
@@ -48,10 +41,6 @@ elif test $(uname -s) = "OpenBSD"; then
 	MANDIR="man"
 	echo "OpenBSD"
 
-	# and even easier to check for libressl
-	printf "checking for LibreSSL..."
-	libressl="yes"
-	echo $libressl
 else
 	LDFLAGS="-lpq -lm"
 	echo "Unknown"
@@ -60,71 +49,15 @@ fi
 
 BUILD_DEPS=""
 
-#### CHECK LIBRESSL VERSION
-## if we have libressl, we need to check for 2.3.2 or newer (the api changed slightly)
-if test $libressl = "yes"; then
-	printf "checking for LibreSSL version >= 2.3.2..."
-	# check LibreSSL version
-	has_good_libressl=$(openssl version | awk ' { split($2,a,"."); print (a[1] > 1) && (a[2] > 2) && (a[2] > 3 || a[3] > 1) } ')
-	if test "x$has_good_libressl" = "x1"; then
-		libressl="yes"
-	else
-		libressl="install"
-	fi
-	echo "$libressl"
-fi
-
-INSTALL_DEPS=""
-## add compile flags for libressl
-if test $libressl = "yes"; then
-	WHICH_SSL=$(which openssl)
-	SSL_LIBDIR1="${WHICH_SSL%bin/openssl}lib"
-	SSL_LIBDIR=$(echo $SSL_LIBDIR1 | sed -e 's/\//\\\//g')
-	LDFLAGS="$LDFLAGS  $SSL_LIBDIR\\/libtls.a $SSL_LIBDIR\\/libssl.a $SSL_LIBDIR\\/libcrypto.a"
-elif test $libressl = "install"; then
-	LDFLAGS="$LDFLAGS libressl\\/tls\\/.libs\\/libtls.a libressl\\/ssl\\/.libs\\/libssl.a libressl\\/crypto\\/.libs\\/libcrypto.a"
-	BUILD_DEPS="$BUILD_DEPS libressl"
-	INSTALL_DEPS="$INSTALL_DEPS libressl-install"
-	printf "resetting modify times for libressl..."
-	if test $(uname -s) = "Darwin"; then
-		DATE=$(date +%Y%m%d%H%M.%S)
-		find libressl/ -name "*.in" | xargs touch -t "$DATE" && find libressl/ -name "*.m4" | xargs touch -t "$DATE" && touch -t "$DATE" libressl/configure
-	else
-		DATE=$(date)
-		find libressl/ -name "*.in" | xargs touch -d "$DATE" && find libressl/ -name "*.m4" | xargs touch -d "$DATE" && touch -d "$DATE" libressl/configure
-	fi
-	echo "done"
-else
-	LDFLAGS="$LDFLAGS libressl\\/tls\\/.libs\\/libtls.a libressl\\/ssl\\/.libs\\/libssl.a libressl\\/crypto\\/.libs\\/libcrypto.a"
-	BUILD_DEPS="$BUILD_DEPS libressl"
-	printf "resetting modify times for libressl..."
-	if test $(uname -s) = "Darwin"; then
-		DATE=$(date +%Y%m%d%H%M.%S)
-		find libressl/ -name "*.in" | xargs touch -t "$DATE" && find libressl/ -name "*.m4" | xargs touch -t "$DATE" && touch -t "$DATE" libressl/configure
-	else
-		DATE=$(date)
-		find libressl/ -name "*.in" | xargs touch -d "$DATE" && find libressl/ -name "*.m4" | xargs touch -d "$DATE" && touch -d "$DATE" libressl/configure
-	fi
-	echo "done"
-fi
-
 VERSION=$(cat VERSION)
 #### CONFIGURE MAKEFILE
 sed -e "s/@sock_dir_parameter@/$directory_parameter/g" \
 	-e "s/@LDFLAGS@/$LDFLAGS/g" \
 	-e "s/@CPPFLAGS@/$CPPFLAGS/g" \
-	-e "s/@BUILD_DEPS@/$BUILD_DEPS/g" \
 	-e "s/@prefix@/\/usr\/local/g" \
 	-e "s/@MANDIR@/$MANDIR/g" \
-	-e "s/@libev_CPPFLAGS@/$libev_CPPFLAGS/g" \
-	-e "s/@libtre_CPPFLAGS@/$libtre_CPPFLAGS/g" \
-	-e "s/@INSTALL_DEPS@/$INSTALL_DEPS/g" \
 	-e "s/@VERSION@/$VERSION/g" \
 	-e "s/@make@/$MAKE/g" < Makefile.in > Makefile
 
 #### CONFIGURE MAN PAGE
 sed -e "s/@prefix@/\/usr\/local/g" < man/ajax2printer.1.in > man/ajax2printer.1
-
-if test $libressl != "yes"; then
-	. scripts/libressl_warn
-fi
