@@ -168,7 +168,7 @@ void *handle(void *_client) {
 		int int_peer_port = htons(addr.sin_port);
 
 		// Create file with content
-		sprintf(str_file_name, "a2p_%d", int_peer_port);
+		sprintf(str_file_name, "/tmp/a2p_%d", int_peer_port);
 		umask(002);
 		FILE *fp = fopen(str_file_name, "wx");
 		if (fp == NULL) {
