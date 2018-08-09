@@ -116,6 +116,7 @@ void *handle(void *_client) {
 
 	// keep reading until the end of the request
 	while (strstr(request, "Content-Length: ") == NULL) {
+		sunlogf(9, "request: %p", request);
 		sunlogf(9, "request: %s", request);
 		memset(buf, 0, BUF_LEN + 1);
 		request_len = read(client->csock, buf, BUF_LEN);
@@ -153,7 +154,7 @@ void *handle(void *_client) {
 	char *query = str_query(request);
 	sunlogf(9, "qry: %s", query);
 	char *str_printer_name = getpar(query, "cups");
-	char *str_msg = getpar(request, "text");
+	char *str_msg = getpar(query, "text");
 	sunlogf(9, "text='%s'", str_msg);
 	char *str_file_name = salloc(20);
 
@@ -168,32 +169,39 @@ void *handle(void *_client) {
 		int int_peer_port = htons(addr.sin_port);
 
 		// Create file with content
-		sprintf(str_file_name, "/tmp/a2p_%d", int_peer_port);
+		sprintf(str_file_name, "a2p_%d", int_peer_port);
 		umask(002);
 		FILE *fp = fopen(str_file_name, "wx");
 		if (fp == NULL) {
 			sunlogf(3, "Error: %s, Could not open file with name: %s", strerror(errno), str_file_name);
-		}
-		fwrite(str_msg, 1, strlen(str_msg), fp);
-		if (ferror(fp)) {
-			sunlogf(3, "Could not write to file with name: %s", str_file_name);
-		}
-		if (fclose(fp) != 0) {
-			sunlogf(3, "Could not close file with name: %s", str_file_name);
-		}
+	                response = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+                                           "{\"stat\":\"false\",\"dat\":\"Could not create file to print\"}";
+		} else {
+			fwrite(str_msg, 1, strlen(str_msg), fp);
+			if (ferror(fp)) {
+				sunlogf(3, "Could not write to file with name: %s", str_file_name);
+			}
+			if (fclose(fp) != 0) {
+				sunlogf(3, "Could not close file with name: %s", str_file_name);
+			}
 
-		// Send print command
-		int int_status; // 1 = error, -1 means we're the parent
-		int_status = sunny_exec(client->csock, "/usr/bin/lp", "-d", str_printer_name, str_file_name);
-		sunlogf(7, "Success! LP command sent to printer %s.\n", str_printer_name);
-
-		// Remove the file we created
-		int_status = sunny_exec(client->csock, "/bin/rm", str_file_name);
-		sunlogf(7, "Success! RM command sent to delete %s.\n", str_file_name);
-
-		// Tell the browser we had success!
-		response = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; "
-				   "charset=UTF-8\r\n\r\n{\"stat\":\"true\"}";
+			// Send print command
+			int int_status; // 1 = error, -1 means we're the parent
+			fprintf(stderr, "/usr/bin/lp -d %s %s\n", str_printer_name, str_file_name);
+			int_status = sunny_exec(client->csock, "/usr/bin/lp", "-d", str_printer_name, str_file_name);
+			sunlogf(7, "Success! LP command sent to printer %s.\n", str_printer_name);
+	
+			unlink(str_file_name);
+			
+			if (int_status != 1) {
+				// Tell the browser we had success!
+				response = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; "
+						   "charset=UTF-8\r\n\r\n{\"stat\":\"true\"}";
+			} else {
+				response = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; "
+						   "charset=UTF-8\r\n\r\n{\"stat\":\"false\",\"dat\":\"lp command failed\"}";
+			}
+		}
 	} else {
 		// Tell the browser we failed!
 		response = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
